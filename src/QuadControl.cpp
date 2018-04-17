@@ -209,7 +209,7 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
   float thrust = 0;
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
+    // add integrator
     float b_z = R(2, 2);
     float z_err = posZCmd - posZ; // error is pointing down
     float z_err_dot = velZCmd - velZ;
