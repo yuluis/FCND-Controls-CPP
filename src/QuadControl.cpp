@@ -74,7 +74,30 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
   cmd.desiredThrustsN[1] = mass * 9.81f / 4.f; // front right
   cmd.desiredThrustsN[2] = mass * 9.81f / 4.f; // rear left
   cmd.desiredThrustsN[3] = mass * 9.81f / 4.f; // rear right
-
+    
+    // overwrite original command and retain comment above of rotor relabeling
+    float l = L / sqrt(2);
+    float c_b = collThrustCmd; // [N]
+    float p_b = momentCmd.x / l; // [N]
+    float q_b = momentCmd.y / l;
+    float r_b = momentCmd.z / -kappa;
+    
+    float f1 = (c_b + p_b + q_b + r_b) / 4; // solve for torque [N.m]
+    float f2 = (c_b - p_b + q_b - r_b) / 4;
+    float f3 = (c_b -p_b - q_b + r_b) / 4;
+    float f4 = (c_b + p_b - q_b - r_b) / 4;
+    
+    f1 = CONSTRAIN(f1, minMotorThrust, maxMotorThrust);
+    f2 = CONSTRAIN(f2, minMotorThrust, maxMotorThrust);
+    f3 = CONSTRAIN(f3, minMotorThrust, maxMotorThrust);
+    f4 = CONSTRAIN(f4, minMotorThrust, maxMotorThrust);
+    
+    
+    cmd.desiredThrustsN[0] = f1; // [N]
+    cmd.desiredThrustsN[1] = f2;
+    cmd.desiredThrustsN[2] = f4;
+    cmd.desiredThrustsN[3] = f3;
+    
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   return cmd;
@@ -98,6 +121,15 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
+    V3F pqrErr = pqrCmd - pqr;
+    V3F Imoment;
+    Imoment.x = Ixx;
+    Imoment.y = Iyy;
+    Imoment.z = Izz;
+    
+    momentCmd.x = kpPQR.x * Imoment.x * pqrErr.x;
+    momentCmd.y = kpPQR.y * Imoment.y * pqrErr.y;
+    momentCmd.z = kpPQR.z * Imoment.z * pqrErr.z;  // [Nm] =  [kg.m.m]* rad/sec
   
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
@@ -129,7 +161,24 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-
+    V3D rpy = attitude.ToEulerYPR(); // used to visualize current attitude in world frame
+    
+    float b_x = R(0, 2);
+    float b_x_err = accelCmd.x - b_x;
+    float b_x_p_term = kpBank * b_x_err;
+    
+    float b_y = R(1, 2);
+    float b_y_err = accelCmd.y - b_y;
+    float b_y_p_term = kpBank * b_y_err;
+    
+    float b_x_commanded_dot = b_x_p_term;
+    float b_y_commanded_dot = b_y_p_term;
+    
+    V3F rot_rate;
+    rot_rate.x = (R(1, 0) * b_x_commanded_dot - R(0, 0) *  b_y_commanded_dot) / R(2, 2);
+    rot_rate.y = (R(1, 1) * b_x_commanded_dot - R(0, 1) *  b_y_commanded_dot) / R(2, 2);
+    pqrCmd.x = rot_rate.x;
+    pqrCmd.y = rot_rate.y;
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -161,7 +210,17 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-
+    float b_z = R(2, 2);
+    float z_err = posZCmd - posZ; // error is pointing down
+    float z_err_dot = velZCmd - velZ;
+    float p_term = kpPosZ * z_err;
+    float d_term = kpVelZ * z_err_dot;
+    
+    float u_1_bar = p_term + d_term + accelZCmd;
+    float c = (u_1_bar - CONST_GRAVITY) / b_z;
+    
+    
+    thrust = -mass * c; // turn thrust to positive number
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
   
@@ -195,7 +254,24 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
 
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-  
+    float x_err = posCmd.x - pos.x;
+    float x_err_dot = velCmd.x - vel.x;
+    
+    float p_term_x = kpPosXY * x_err;
+    float d_term_x = kpVelXY * x_err_dot;
+    float x_dot_dot_command = p_term_x + d_term_x + accelCmd.x;
+    float c = -1; // not sure what this is
+    float b_x_c = x_dot_dot_command / c;
+    float b = 2; // constrain limit
+    accelCmd.x = fmodf(b_x_c, b);
+    
+    float y_err = posCmd.y - pos.y;
+    float y_err_dot = velCmd.y - vel.y;
+    float p_term_y = kpPosXY * y_err;
+    float d_term_y = kpVelXY * y_err_dot;
+    float y_dot_dot_command = p_term_y + d_term_y + accelCmd.y;
+    float b_y_c = y_dot_dot_command / c;
+    accelCmd.y = fmodf(b_y_c, b);
 
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -218,7 +294,11 @@ float QuadControl::YawControl(float yawCmd, float yaw)
   float yawRateCmd=0;
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-
+    float psi_err = yawCmd - yaw;
+    float b = 1;
+    yawRateCmd = kpYaw * psi_err;
+    yawRateCmd = fmodf(yawRateCmd,b);
+    
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   return yawRateCmd;
