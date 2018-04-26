@@ -162,13 +162,18 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
     V3D rpy = attitude.ToEulerYPR(); // used to visualize current attitude in world frame
+    float c = -collThrustCmd/mass;
+    float R13 = accelCmd.x / c;
+    float R23 = accelCmd.y / c; // commanded roll
+    float R33 = (accelCmd.z - CONST_GRAVITY) / c;
+    float tau_rp = 0.020; // 20 ms time constant assumed
     
-    float b_x = R(0, 2);
-    float b_x_err = accelCmd.x - b_x;
-    float b_x_p_term = kpBank * b_x_err;
+    float b_x = R(0, 2); // actual roll
+    float b_x_err = (R13 - b_x) / tau_rp;
+    float b_x_p_term = kpBank * b_x_err;  // gain can be determined by rise time and zeta?
     
     float b_y = R(1, 2);
-    float b_y_err = accelCmd.y - b_y;
+    float b_y_err = (R23 - b_y) / tau_rp;
     float b_y_p_term = kpBank * b_y_err;
     
     float b_x_commanded_dot = b_x_p_term;
