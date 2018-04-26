@@ -163,11 +163,11 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
 
     V3D rpy = attitude.ToEulerYPR(); // used to visualize current attitude in world frame
     float c = -collThrustCmd/mass;
-    float R13 = accelCmd.x / c;
+    float R13 = CONSTRAIN(accelCmd.x / c, -maxTiltAngle, maxTiltAngle) ;
     float R23 = accelCmd.y / c; // commanded roll
     float R33 = (accelCmd.z - CONST_GRAVITY) / c;
     float tau_rp = 0.020; // 20 ms time constant assumed
-    
+    //printf("R13(%f)", R13);
     float b_x = R(0, 2); // actual roll
     float b_x_err = (R13 - b_x) / tau_rp;
     float b_x_p_term = kpBank * b_x_err;  // gain can be determined by rise time and zeta?
@@ -184,7 +184,8 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
     rot_rate.y = (R(1, 1) * b_x_commanded_dot - R(0, 1) *  b_y_commanded_dot) / R(2, 2);
     pqrCmd.x = rot_rate.x;
     pqrCmd.y = rot_rate.y;
-
+    pqrCmd.z = 0;
+    
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   return pqrCmd;
@@ -269,10 +270,10 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
     float p_term_x = kpPosXY * x_err;
     float d_term_x = kpVelXY * x_err_dot;
     float x_dot_dot_command = p_term_x + d_term_x + accelCmd.x;
-    float c = -1; // not sure what this is
+    float c = 1; // not sure what this is
     float b_x_c = x_dot_dot_command / c;
-    float b = 2; // constrain limit
-    accelCmd.x = fmodf(b_x_c, b);
+
+    accelCmd.x = b_x_c;
     
     float y_err = posCmd.y - pos.y;
     float y_err_dot = velCmd.y - vel.y;
@@ -280,8 +281,8 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
     float d_term_y = kpVelXY * y_err_dot;
     float y_dot_dot_command = p_term_y + d_term_y + accelCmd.y;
     float b_y_c = y_dot_dot_command / c;
-    accelCmd.y = fmodf(b_y_c, b);
-
+    accelCmd.y = b_y_c;
+    accelCmd.z = 0;
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
   return accelCmd;
@@ -300,13 +301,11 @@ float QuadControl::YawControl(float yawCmd, float yaw)
   //  - use fmodf(foo,b) to constrain float foo to range [0,b]
   //  - use the yaw control gain parameter kpYaw
 
-  float yawRateCmd=0;
+  float yawRateCmd;
   ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
     float psi_err = yawCmd - yaw;
-    float b = 1;
     yawRateCmd = kpYaw * psi_err;
-    yawRateCmd = fmodf(yawRateCmd,b);
     
   /////////////////////////////// END STUDENT CODE ////////////////////////////
 
